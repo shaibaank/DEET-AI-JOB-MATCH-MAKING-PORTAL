@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import JobseekerDashboard from '@/components/jobseeker/JobseekerDashboard'
 import EmployerDashboard from '@/components/employer/EmployerDashboard'
+import AnalyticsReport from '@/components/shared/AnalyticsReport'
 import Header from '@/components/shared/Header'
 import { Check } from 'lucide-react'
 
@@ -31,7 +32,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeJobseeker, setActiveJobseeker] = useState<string | null>(null)
   const [notification, setNotification] = useState<string | null>(null)
-  const [activeView, setActiveView] = useState<'jobseeker' | 'employer'>('jobseeker')
+  const [activeView, setActiveView] = useState<'jobseeker' | 'employer' | 'analytics'>('jobseeker')
 
   // Polling for real-time updates
   const fetchSync = useCallback(async () => {
@@ -134,6 +135,19 @@ export default function Home() {
                 activeJobseeker={activeJobseeker}
                 onRefresh={fetchSync}
               />
+            )}
+          </div>
+
+          {/* Analytics View */}
+          <div 
+            className={`transition-all duration-700 ease-luxury ${
+              activeView === 'analytics' 
+                ? 'opacity-100 translate-x-0' 
+                : 'opacity-0 translate-x-8 pointer-events-none absolute inset-0'
+            }`}
+          >
+            {activeView === 'analytics' && (
+              <AnalyticsReport />
             )}
           </div>
         </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Phone, Search, SlidersHorizontal, MapPin, Wallet, Briefcase, Check, X, ArrowRight, User } from 'lucide-react'
+import { Phone, Search, SlidersHorizontal, MapPin, Wallet, Briefcase, Check, X, ArrowRight, User, Mic } from 'lucide-react'
 import ResumeDropzone, { AIResumeInsights } from '../ui/ResumeDropzone'
 import ResumePreview from '../ui/ResumePreview'
 import SkillAutocomplete from '../ui/SkillAutocomplete'
@@ -150,15 +150,28 @@ export default function JobseekerDashboard({ syncData, onJobseekerChange, onRefr
         }),
       })
 
+      // Ensure we have demo jobs to match against
+      const seedCheck = await fetch('/api/seed')
+      const seedStatus = await seedCheck.json()
+      if (!seedStatus.hasData || seedStatus.counts?.jobs === 0) {
+        // Seed demo jobs only (keeps current user)
+        await fetch('/api/jobs/seed-demo', { method: 'POST' })
+      }
+
       // Recalculate matches
       const matchRes = await fetch('/api/matches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobseekerId: jobseeker._id, recalculate: true }),
       })
-      const newMatches = await matchRes.json()
-      setMatches(Array.isArray(newMatches) ? newMatches : [newMatches])
+      const matchData = await matchRes.json()
       
+      // The POST returns { success, matches } - extract properly  
+      if (matchData.matches && Array.isArray(matchData.matches)) {
+        // matches from POST don't have populated job objects, so fetch enriched data
+      }
+      
+      // Fetch enriched matches with job details
       await fetchMatches(jobseeker._id)
       onRefresh()
     } catch (error) {
@@ -457,6 +470,47 @@ export default function JobseekerDashboard({ syncData, onJobseekerChange, onRefr
               not just keyword matches. "Backend Development" matches Python roles because our engine 
               understands the connection.
             </p>
+          </div>
+        )}
+
+        {/* Screening History */}
+        {screenings.length > 0 && (
+          <div className="mx-6 mt-4">
+            <h3 className="text-xs overline mb-3">Recent Screenings</h3>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {screenings.slice(0, 5).map((scr: any) => {
+                const score = scr.scores?.overall ?? 0
+                const readiness = scr.aiEvaluation?.interviewReadiness
+                return (
+                  <div
+                    key={scr._id}
+                    className="flex-shrink-0 w-56 p-3 border border-charcoal/10 bg-white/50 rounded-lg"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-warmgrey">
+                        {new Date(scr.createdAt).toLocaleDateString()}
+                      </span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        score >= 80 ? 'bg-score-excellent/10 text-score-excellent' :
+                        score >= 60 ? 'bg-score-good/10 text-score-good' :
+                        score >= 40 ? 'bg-score-fair/10 text-score-fair' :
+                        'bg-score-poor/10 text-score-poor'
+                      }`}>
+                        {score}/100
+                      </span>
+                    </div>
+                    <p className="text-sm text-charcoal font-medium truncate">
+                      {scr.jobId ? 'Job Screening' : 'General Screening'}
+                    </p>
+                    {readiness && (
+                      <p className="text-xs text-warmgrey mt-1 capitalize">
+                        {readiness.replace('-', ' ')}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
 

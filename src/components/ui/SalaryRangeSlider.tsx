@@ -21,59 +21,23 @@ export default function SalaryRangeSlider({
   formatValue = (v) => `₹${v}L`,
   label = 'Salary Range'
 }: SalaryRangeSliderProps) {
-  const [isDragging, setIsDragging] = useState<'min' | 'max' | null>(null)
-  const trackRef = useRef<HTMLDivElement>(null)
 
-  const getPositionFromValue = (val: number) => {
-    return ((val - min) / (max - min)) * 100
-  }
-
-  const getValueFromPosition = (clientX: number) => {
-    if (!trackRef.current) return min
-    const rect = trackRef.current.getBoundingClientRect()
-    const percentage = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-    const rawValue = min + percentage * (max - min)
-    return Math.round(rawValue / step) * step
-  }
-
-  const handleMouseDown = (type: 'min' | 'max') => (e: React.MouseEvent) => {
-    e.preventDefault()
-    setIsDragging(type)
-  }
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging) return
-    
-    const newValue = getValueFromPosition(e.clientX)
-    
-    if (isDragging === 'min') {
-      if (newValue < value[1]) {
-        onChange([newValue, value[1]])
-      }
-    } else {
-      if (newValue > value[0]) {
-        onChange([value[0], newValue])
-      }
+  const handleMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newMin = parseInt(e.target.value)
+    if (newMin <= value[1]) {
+      onChange([newMin, value[1]])
     }
-  }, [isDragging, value, onChange])
+  }
 
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(null)
-  }, [])
-
-  useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('mouseup', handleMouseUp)
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove)
-        window.removeEventListener('mouseup', handleMouseUp)
-      }
+  const handleMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newMax = parseInt(e.target.value)
+    if (newMax >= value[0]) {
+      onChange([value[0], newMax])
     }
-  }, [isDragging, handleMouseMove, handleMouseUp])
+  }
 
-  const minPos = getPositionFromValue(value[0])
-  const maxPos = getPositionFromValue(value[1])
+  const minPos = ((value[0] - min) / (max - min)) * 100
+  const maxPos = ((value[1] - min) / (max - min)) * 100
 
   return (
     <div className="py-4">
@@ -81,79 +45,55 @@ export default function SalaryRangeSlider({
       <div className="flex items-center justify-between mb-6">
         <label className="overline">{label}</label>
         <div className="flex items-center gap-2">
-          <span className="text-2xl font-serif text-charcoal font-medium transition-all duration-300">
+          <span className="text-2xl font-serif font-medium transition-all duration-300" style={{ color: '#1A1A1A' }}>
             {formatValue(value[0])}
           </span>
-          <span className="text-warmgrey">—</span>
-          <span className="text-2xl font-serif text-charcoal font-medium transition-all duration-300">
+          <span style={{ color: '#6C6863' }}>—</span>
+          <span className="text-2xl font-serif font-medium transition-all duration-300" style={{ color: '#1A1A1A' }}>
             {formatValue(value[1])}
           </span>
         </div>
       </div>
 
-      {/* Slider track */}
-      <div 
-        ref={trackRef}
-        className="relative h-12 cursor-pointer"
-        onClick={(e) => {
-          const newValue = getValueFromPosition(e.clientX)
-          // Click closer to which handle
-          const distToMin = Math.abs(newValue - value[0])
-          const distToMax = Math.abs(newValue - value[1])
-          
-          if (distToMin < distToMax && newValue < value[1]) {
-            onChange([newValue, value[1]])
-          } else if (newValue > value[0]) {
-            onChange([value[0], newValue])
-          }
-        }}
-      >
+      {/* Dual range slider */}
+      <div className="relative h-12">
         {/* Track background */}
-        <div className="absolute top-1/2 -translate-y-1/2 w-full h-0.5 bg-taupe" />
+        <div className="absolute top-1/2 -translate-y-1/2 w-full h-0.5" style={{ background: '#EBE5DE' }} />
         
         {/* Active range */}
         <div 
-          className="absolute top-1/2 -translate-y-1/2 h-0.5 bg-charcoal transition-all duration-75"
+          className="absolute top-1/2 -translate-y-1/2 h-0.5 transition-all duration-75"
           style={{
             left: `${minPos}%`,
-            width: `${maxPos - minPos}%`
+            width: `${maxPos - minPos}%`,
+            background: '#1A1A1A'
           }}
         />
 
-        {/* Min handle */}
-        <div
-          className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-charcoal cursor-grab transition-all duration-300
-            ${isDragging === 'min' ? 'scale-125 bg-gold cursor-grabbing' : 'hover:scale-110 hover:bg-gold'}
-          `}
-          style={{ left: `${minPos}%` }}
-          onMouseDown={handleMouseDown('min')}
-        >
-          {/* Tooltip */}
-          {isDragging === 'min' && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-charcoal text-white text-xs whitespace-nowrap animate-fadeInUp">
-              {formatValue(value[0])}
-            </div>
-          )}
-        </div>
-
-        {/* Max handle */}
-        <div
-          className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 bg-charcoal cursor-grab transition-all duration-300
-            ${isDragging === 'max' ? 'scale-125 bg-gold cursor-grabbing' : 'hover:scale-110 hover:bg-gold'}
-          `}
-          style={{ left: `${maxPos}%` }}
-          onMouseDown={handleMouseDown('max')}
-        >
-          {/* Tooltip */}
-          {isDragging === 'max' && (
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-charcoal text-white text-xs whitespace-nowrap animate-fadeInUp">
-              {formatValue(value[1])}
-            </div>
-          )}
-        </div>
+        {/* Native range inputs stacked */}
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value[0]}
+          onChange={handleMinChange}
+          className="salary-range-input absolute top-0 left-0 w-full h-full pointer-events-none"
+          style={{ zIndex: value[0] > max - 5 ? 5 : 3 }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value[1]}
+          onChange={handleMaxChange}
+          className="salary-range-input absolute top-0 left-0 w-full h-full pointer-events-none"
+          style={{ zIndex: 4 }}
+        />
 
         {/* Scale markers */}
-        <div className="absolute top-full mt-2 w-full flex justify-between text-xs text-warmgrey">
+        <div className="absolute top-full mt-2 w-full flex justify-between text-xs" style={{ color: '#6C6863' }}>
           <span>{formatValue(min)}</span>
           <span>{formatValue(Math.round((min + max) / 2))}</span>
           <span>{formatValue(max)}</span>

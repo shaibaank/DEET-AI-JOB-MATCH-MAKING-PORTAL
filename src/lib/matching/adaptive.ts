@@ -4,8 +4,8 @@
  * Uses simple gradient-based adjustment per job posting
  */
 
-import { connectToDatabase } from '../mongodb'
-import Match from '../models/Match'
+import connectDB from '../mongodb'
+import { Match } from '../models'
 
 export interface WeightProfile {
   skills: number
@@ -94,7 +94,7 @@ export function learnFromFeedback(
  */
 export async function learnFromHistory(jobId: string): Promise<WeightProfile> {
   try {
-    await connectToDatabase()
+    await connectDB()
     
     const feedbackMatches = await Match.find({
       jobId,

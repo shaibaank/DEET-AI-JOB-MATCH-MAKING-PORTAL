@@ -1,18 +1,14 @@
 import { NextResponse } from 'next/server'
-import { connectToDatabase } from '@/lib/mongodb'
-import Match from '@/lib/models/Match'
-import Job from '@/lib/models/Job'
-import Jobseeker from '@/lib/models/Jobseeker'
-import { matchJobToCandidates, getMatchingMetrics } from '@/lib/matching/engine'
-import { getAdaptationMetrics, getWeightsForJob } from '@/lib/matching/adaptive'
-import { IJob } from '@/lib/models/Job'
-import { IJobseeker } from '@/lib/models/Jobseeker'
+import connectDB from '@/lib/mongodb'
+import { Match, Job, Jobseeker, type IJob, type IJobseeker } from '@/lib/models'
+import { matchJobToCandidates, getMatchingMetrics, type MatchResult } from '@/lib/matching/engine'
+import { getAdaptationMetrics } from '@/lib/matching/adaptive'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    await connectToDatabase()
+    await connectDB()
     
     const [jobs, jobseekers, matches] = await Promise.all([
       Job.find({}).lean(),
@@ -21,7 +17,7 @@ export async function GET() {
     ])
 
     // 1. Generate fresh matching metrics for all job-candidate pairs
-    const allMatchResults = []
+    const allMatchResults: MatchResult[] = []
     for (const job of jobs) {
       const results = matchJobToCandidates(job as unknown as IJob, jobseekers as unknown as IJobseeker[])
       allMatchResults.push(...results)

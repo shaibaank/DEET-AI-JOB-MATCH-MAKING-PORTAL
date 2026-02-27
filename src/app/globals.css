@@ -1,6 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
 @import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+/* Tailwind v4 theme — registers custom colors + animations as utilities */
+@theme {
+  /* Luxury palette */
+  --color-alabaster: #F9F8F6;
+  --color-charcoal: #1A1A1A;
+  --color-taupe: #EBE5DE;
+  --color-warmgrey: #6C6863;
+  --color-gold: #D4AF37;
+
+  /* Semantic skill colors */
+  --color-skill-match: #22C55E;
+  --color-skill-mismatch: #EF4444;
+
+  /* Score colors */
+  --color-score-excellent: #10B981;
+  --color-score-good: #3B82F6;
+  --color-score-fair: #F59E0B;
+  --color-score-poor: #EF4444;
+
+  /* Fonts */
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-serif: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  /* Transition timing function */
+  --ease-luxury: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  /* Additional transition durations */
+  --transition-duration-700: 700ms;
+  --transition-duration-1500: 1500ms;
+  --transition-duration-2000: 2000ms;
+
+  /* Keyframes */
+  --animate-fadeInUp: fadeInUp 0.6s ease-out forwards;
+  --animate-cascadeIn: cascadeIn 0.8s ease-out forwards;
+  --animate-slideInRight: slideInRight 0.5s ease-out forwards;
+  --animate-goldSlide: goldSlide 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  --animate-progressBar: progressBar 2.5s ease-out forwards;
+  --animate-shimmer: shimmer 2s infinite linear;
+  --animate-scaleIn: scaleIn 0.4s ease-out forwards;
+  --animate-resumeFloat: resumeFloat 3s ease-in-out infinite;
+}
+
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes cascadeIn {
+  0% { opacity: 0; transform: translateY(30px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideInRight {
+  0% { opacity: 0; transform: translateX(40px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes goldSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(0); }
+}
+@keyframes progressBar {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes scaleIn {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes resumeFloat {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.3; }
+  50% { transform: translateY(-20px) scale(1.5); opacity: 0.6; }
+}
 
 :root {
   --alabaster: #F9F8F6;
@@ -386,4 +461,52 @@ input[type="range"]::-moz-range-thumb {
 
 .section-dark .divider {
   background: var(--alabaster);
+}
+
+/* Dual range slider - stacked native inputs */
+.salary-range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.salary-range-input::-webkit-slider-runnable-track {
+  height: 2px;
+  background: transparent;
+}
+
+.salary-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: var(--charcoal);
+  margin-top: -9px;
+  cursor: pointer;
+  pointer-events: all;
+  transition: all 300ms ease-out;
+}
+
+.salary-range-input::-webkit-slider-thumb:hover {
+  background: var(--gold);
+  transform: scale(1.2);
+}
+
+.salary-range-input::-moz-range-track {
+  height: 2px;
+  background: transparent;
+}
+
+.salary-range-input::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: var(--charcoal);
+  border: none;
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.salary-range-input::-moz-range-thumb:hover {
+  background: var(--gold);
 }

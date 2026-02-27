@@ -1,8 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Phone, PhoneCall, Mic, CheckCircle, AlertCircle, Loader } from 'lucide-react'
-import ScoreBadge, { MatchScoreBar } from '../shared/ScoreBadge'
+import { useState, useEffect } from 'react'
+import {
+  X, Phone, PhoneCall, Mic, CheckCircle, AlertCircle,
+  Loader, TrendingUp, Target, Brain, Users, Shield,
+  ArrowRight, Sparkles, ChevronRight,
+} from 'lucide-react'
+import ScoreBadge from '../shared/ScoreBadge'
 
 interface ScreeningModalProps {
   jobseeker: any
@@ -10,14 +14,45 @@ interface ScreeningModalProps {
   onClose: () => void
 }
 
-export default function ScreeningModal({ jobseeker, job, onClose }: ScreeningModalProps) {
-  const [step, setStep] = useState<'consent' | 'calling' | 'demo' | 'results'>('consent')
-  const [screening, setScreening] = useState<any>(null)
-  const [demoTranscript, setDemoTranscript] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+type Step = 'consent' | 'phone-input' | 'calling' | 'analyzing' | 'results'
 
-  const startCall = async (mode: 'phone' | 'demo') => {
+const DIMENSION_META: Record<string, { label: string; icon: any; color: string }> = {
+  technicalDepth:       { label: 'Technical Depth',       icon: Brain,    color: 'text-blue-400' },
+  communicationClarity: { label: 'Communication',         icon: Users,    color: 'text-purple-400' },
+  problemSolving:       { label: 'Problem Solving',       icon: Target,   color: 'text-emerald-400' },
+  cultureFit:           { label: 'Culture Fit',           icon: Shield,   color: 'text-amber-400' },
+  confidence:           { label: 'Confidence',            icon: TrendingUp, color: 'text-rose-400' },
+}
+
+const READINESS_MAP: Record<string, { label: string; color: string }> = {
+  ready:       { label: 'Interview Ready',   color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' },
+  almost:      { label: 'Almost Ready',      color: 'bg-blue-500/20 text-blue-400 border-blue-500/40' },
+  'needs-work':{ label: 'Needs Practice',    color: 'bg-amber-500/20 text-amber-400 border-amber-500/40' },
+  'not-ready': { label: 'Not Ready Yet',     color: 'bg-red-500/20 text-red-400 border-red-500/40' },
+}
+
+export default function ScreeningModal({ jobseeker, job, onClose }: ScreeningModalProps) {
+  const [step, setStep] = useState<Step>('consent')
+  const [screening, setScreening] = useState<any>(null)
+  const [phoneNumber, setPhoneNumber] = useState(jobseeker?.phone || '')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [pollTimer, setPollTimer] = useState<NodeJS.Timeout | null>(null)
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => { if (pollTimer) clearTimeout(pollTimer) }
+  }, [pollTimer])
+
+  /* ─── Start phone call ──────────────────────────────────────── */
+  const startPhoneCall = async () => {
+    if (!phoneNumber.trim()) {
+      setError('Please enter your phone number')
+      return
+    }
+    setError('')
     setIsLoading(true)
+
     try {
       const res = await fetch('/api/screenings', {
         method: 'POST',
@@ -25,27 +60,30 @@ export default function ScreeningModal({ jobseeker, job, onClose }: ScreeningMod
         body: JSON.stringify({
           jobseekerId: jobseeker._id,
           jobId: job?._id,
-          mode: mode === 'demo' ? 'demo' : 'phone',
+          phoneNumber: phoneNumber.trim(),
+          mode: 'phone',
         }),
       })
       const data = await res.json()
       setScreening(data)
-      
-      if (mode === 'demo') {
-        setStep('demo')
+
+      if (data.mode === 'demo') {
+        // Retell unavailable — skip to results placeholder
+        setStep('results')
       } else {
         setStep('calling')
-        // Poll for call completion
-        checkCallStatus(data.screening._id)
+        pollCallStatus(data.screening._id || data.screening?._id)
       }
-    } catch (error) {
-      console.error('Start call error:', error)
+    } catch (err) {
+      console.error('Start call error:', err)
+      setError('Failed to start call. Please try again.')
     }
     setIsLoading(false)
   }
 
-  const checkCallStatus = async (screeningId: string) => {
-    const interval = setInterval(async () => {
+  /* ─── Poll for call completion ──────────────────────────────── */
+  const pollCallStatus = (screeningId: string) => {
+    const poll = async () => {
       try {
         const res = await fetch('/api/screenings', {
           method: 'PATCH',
@@ -53,268 +91,397 @@ export default function ScreeningModal({ jobseeker, job, onClose }: ScreeningMod
           body: JSON.stringify({ id: screeningId, action: 'check-status' }),
         })
         const data = await res.json()
-        
-        if (data.hasTranscript || data.callStatus === 'ended') {
-          clearInterval(interval)
-          const updatedRes = await fetch(`/api/screenings?id=${screeningId}`)
-          const updated = await updatedRes.json()
-          setScreening({ screening: updated })
-          setStep('results')
+
+        if (data.hasTranscript || data.callStatus === 'ended' || data.callStatus === 'error') {
+          // Fetch updated screening with AI evaluation
+          setStep('analyzing')
+          await waitForEvaluation(screeningId)
+          return
         }
-      } catch (error) {
-        console.error('Check status error:', error)
+      } catch (err) {
+        console.error('Poll error:', err)
       }
-    }, 3000)
-
-    // Timeout after 5 minutes
-    setTimeout(() => clearInterval(interval), 300000)
-  }
-
-  const submitDemoTranscript = async () => {
-    if (!demoTranscript.trim() || !screening?.screening?._id) return
-    
-    setIsLoading(true)
-    try {
-      const res = await fetch('/api/screenings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: screening.screening._id,
-          transcript: demoTranscript,
-        }),
-      })
-      const data = await res.json()
-      setScreening({ screening: data.screening, summary: data.summary })
-      setStep('results')
-    } catch (error) {
-      console.error('Submit transcript error:', error)
+      // Keep polling every 4 seconds
+      const t = setTimeout(poll, 4000)
+      setPollTimer(t)
     }
-    setIsLoading(false)
+    const t = setTimeout(poll, 5000) // first check after 5s
+    setPollTimer(t)
   }
+
+  /* ─── Wait for AI evaluation to complete ───────────────────── */
+  const waitForEvaluation = async (screeningId: string, retries = 15) => {
+    for (let i = 0; i < retries; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      try {
+        const res = await fetch(`/api/screenings?id=${screeningId}`)
+        const data = await res.json()
+        if (data.status === 'completed' || data.aiEvaluation) {
+          setScreening({ screening: data })
+          setStep('results')
+          return
+        }
+      } catch (err) {
+        console.error('Eval poll error:', err)
+      }
+    }
+    // Timeout — show whatever we have
+    const res = await fetch(`/api/screenings?id=${screeningId}`)
+    const data = await res.json()
+    setScreening({ screening: data })
+    setStep('results')
+  }
+
+  /* ─── Render helpers ────────────────────────────────────────── */
+  const renderDimensionBar = (key: string, score: number) => {
+    const meta = DIMENSION_META[key]
+    if (!meta) return null
+    const Icon = meta.icon
+    return (
+      <div key={key} className="space-y-1.5">
+        <div className="flex items-center justify-between text-sm">
+          <span className="flex items-center gap-2 text-charcoal">
+            <Icon className={`w-4 h-4 ${meta.color}`} />
+            {meta.label}
+          </span>
+          <span className="font-semibold text-charcoal">{score}</span>
+        </div>
+        <div className="h-2 bg-charcoal/10 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${score}%`,
+              background: score >= 80 ? '#10B981' : score >= 60 ? '#3B82F6' : score >= 40 ? '#F59E0B' : '#EF4444',
+            }}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  const s = screening?.screening
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-slate-800 rounded-2xl w-full max-w-lg mx-4 overflow-hidden animate-fadeIn">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <h3 className="text-lg font-display font-semibold text-white">
-            {step === 'consent' && 'Practice Screening Call'}
-            {step === 'calling' && 'Call in Progress'}
-            {step === 'demo' && 'Demo Mode'}
-            {step === 'results' && 'Screening Results'}
-          </h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-alabaster rounded-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-2xl animate-fadeIn border border-charcoal/10">
+        {/* ─── Header ─────────────────────────────────────────── */}
+        <div className="flex items-center justify-between p-5 border-b border-charcoal/10 sticky top-0 bg-alabaster z-10">
+          <div>
+            <p className="overline mb-0.5">AI Screening</p>
+            <h3 className="font-serif text-lg text-charcoal">
+              {step === 'consent'     && 'Phone Screening'}
+              {step === 'phone-input' && 'Enter Your Number'}
+              {step === 'calling'     && 'Call in Progress'}
+              {step === 'analyzing'   && 'Analyzing Responses'}
+              {step === 'results'     && 'Screening Results'}
+            </h3>
+          </div>
+          <button onClick={onClose} className="text-warmgrey hover:text-charcoal transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content */}
+        {/* ─── Content ────────────────────────────────────────── */}
         <div className="p-6">
+
+          {/* ────── CONSENT ────── */}
           {step === 'consent' && (
             <div className="space-y-6">
-              <div className="flex items-center gap-4 p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
-                <Mic className="w-8 h-8 text-blue-400" />
+              <div className="flex items-start gap-4 p-4 bg-gold/10 rounded-lg border border-gold/30">
+                <Mic className="w-7 h-7 text-gold flex-shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="font-semibold text-white">Voice Recording Notice</h4>
-                  <p className="text-sm text-slate-400">
-                    This practice call will record your voice for feedback. Your responses will be analyzed by AI.
+                  <h4 className="font-semibold text-charcoal">AI Voice Interview</h4>
+                  <p className="text-sm text-warmgrey mt-1">
+                    Our AI interviewer "Priya" will call your phone and conduct a 5–7 minute screening.
+                    Your responses are recorded, transcribed, and evaluated by AI.
                   </p>
                 </div>
               </div>
 
               {job && (
-                <div className="p-4 bg-white/5 rounded-lg">
-                  <p className="text-sm text-slate-400">Practicing for:</p>
-                  <p className="font-medium text-white">{job.title} at {job.company}</p>
+                <div className="p-4 bg-charcoal/5 rounded-lg">
+                  <p className="text-xs overline mb-1">Screening For</p>
+                  <p className="font-serif text-charcoal">{job.title}</p>
+                  <p className="text-sm text-warmgrey">{job.company}</p>
                 </div>
               )}
 
-              <div className="space-y-3">
-                <p className="text-sm text-slate-300">Questions will be based on:</p>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2 text-sm text-slate-400">
-                    <CheckCircle className="w-4 h-4 text-green-400" />
-                    Your work experience
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-slate-400">
-                    <CheckCircle className="w-4 h-4 text-green-400" />
-                    Your listed skills
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-slate-400">
-                    <CheckCircle className="w-4 h-4 text-green-400" />
-                    Availability & expectations
-                  </li>
-                </ul>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => startCall('phone')}
-                  disabled={isLoading}
-                  className="flex-1 btn-primary btn-jobseeker flex items-center justify-center gap-2"
-                >
-                  <Phone className="w-4 h-4" />
-                  Call My Phone
-                </button>
-                <button
-                  onClick={() => startCall('demo')}
-                  disabled={isLoading}
-                  className="flex-1 px-4 py-2 rounded-lg bg-white/10 text-white font-medium hover:bg-white/20 transition-colors"
-                >
-                  Demo Mode
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === 'calling' && (
-            <div className="text-center py-8">
-              <div className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <PhoneCall className="w-10 h-10 text-green-400" />
-              </div>
-              <h4 className="text-xl font-display font-semibold text-white mb-2">
-                Calling Your Phone...
-              </h4>
-              <p className="text-slate-400 mb-4">
-                Answer the incoming call from {process.env.NEXT_PUBLIC_TWILIO_PHONE || '+1 (464) 262-8169'}
-              </p>
-              <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
-                <Loader className="w-4 h-4 animate-spin" />
-                Waiting for call to complete...
-              </div>
-            </div>
-          )}
-
-          {step === 'demo' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertCircle className="w-5 h-5 text-yellow-400" />
-                  <span className="font-semibold text-white">Demo Mode</span>
-                </div>
-                <p className="text-sm text-slate-400">
-                  Paste a mock transcript to test the scoring system.
-                </p>
-              </div>
-
-              {screening?.questions && (
-                <div>
-                  <p className="text-sm font-medium text-white mb-2">Questions that would be asked:</p>
-                  <ol className="space-y-2">
-                    {screening.questions.map((q: string, i: number) => (
-                      <li key={i} className="text-sm text-slate-400">
-                        {i + 1}. {q}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-
-              <div>
-                <label className="text-sm font-medium text-white mb-2 block">
-                  Paste Mock Transcript:
-                </label>
-                <textarea
-                  value={demoTranscript}
-                  onChange={(e) => setDemoTranscript(e.target.value)}
-                  placeholder="Interviewer: Tell me about your role...&#10;Candidate: I worked as a Senior Developer at Tech Corp for 3 years, where I led a team of 5 developers and increased deployment efficiency by 40%..."
-                  className="w-full h-40 bg-white/5 border border-white/10 rounded-lg p-3 text-white text-sm resize-none"
-                />
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-charcoal">What to expect:</p>
+                {[
+                  'AI generates personalized questions from your resume',
+                  '5 screening questions about your experience & skills',
+                  'Full transcript evaluation with detailed scoring',
+                  'Career path analysis & improvement suggestions',
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-2.5 text-sm text-warmgrey">
+                    <CheckCircle className="w-4 h-4 text-score-excellent flex-shrink-0" />
+                    {item}
+                  </div>
+                ))}
               </div>
 
               <button
-                onClick={submitDemoTranscript}
-                disabled={isLoading || !demoTranscript.trim()}
-                className="w-full btn-primary btn-jobseeker flex items-center justify-center gap-2 disabled:opacity-50"
+                onClick={() => setStep('phone-input')}
+                className="w-full btn-luxury flex items-center justify-center gap-2"
               >
-                {isLoading ? (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  'Analyze Transcript'
-                )}
+                <Phone className="w-4 h-4" />
+                Start Screening
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           )}
 
-          {step === 'results' && screening?.screening && (
-            <div className="space-y-4">
+          {/* ────── PHONE INPUT ────── */}
+          {step === 'phone-input' && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Phone className="w-8 h-8 text-gold" />
+                </div>
+                <h4 className="font-serif text-xl text-charcoal mb-1">Your Phone Number</h4>
+                <p className="text-sm text-warmgrey">
+                  Enter the number where you'd like to receive the screening call.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs overline mb-2 block">Phone Number</label>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => { setPhoneNumber(e.target.value); setError('') }}
+                  placeholder="+91 79978 54857"
+                  className="input-luxury text-lg tracking-wide"
+                  autoFocus
+                />
+                <p className="text-xs text-warmgrey mt-2">
+                  Include country code (e.g. +91 for India, +1 for US)
+                </p>
+                {error && (
+                  <p className="text-sm text-red-500 mt-2 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" /> {error}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep('consent')}
+                  className="px-5 py-2.5 border border-charcoal/20 text-charcoal hover:border-charcoal transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={startPhoneCall}
+                  disabled={isLoading || !phoneNumber.trim()}
+                  className="flex-1 btn-luxury flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <><Loader className="w-4 h-4 animate-spin" /> Connecting...</>
+                  ) : (
+                    <><PhoneCall className="w-4 h-4" /> Call Me Now</>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ────── CALLING ────── */}
+          {step === 'calling' && (
+            <div className="text-center py-8 space-y-6">
+              <div className="w-24 h-24 rounded-full bg-score-excellent/10 flex items-center justify-center mx-auto animate-pulse">
+                <PhoneCall className="w-12 h-12 text-score-excellent" />
+              </div>
+              <div>
+                <h4 className="font-serif text-xl text-charcoal mb-2">
+                  Calling {phoneNumber}
+                </h4>
+                <p className="text-warmgrey text-sm">
+                  Answer the incoming call from our AI interviewer Priya.
+                  <br />The call will last about 5–7 minutes.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-sm text-warmgrey">
+                <Loader className="w-4 h-4 animate-spin" />
+                Waiting for call to complete…
+              </div>
+              <div className="p-3 bg-charcoal/5 rounded-lg text-xs text-warmgrey">
+                <strong>Tip:</strong> Speak clearly, give specific examples with numbers, and mention relevant skills.
+              </div>
+            </div>
+          )}
+
+          {/* ────── ANALYZING ────── */}
+          {step === 'analyzing' && (
+            <div className="text-center py-10 space-y-6">
+              <div className="w-20 h-20 bg-gold/10 rounded-full flex items-center justify-center mx-auto">
+                <Sparkles className="w-10 h-10 text-gold animate-pulse" />
+              </div>
+              <div>
+                <h4 className="font-serif text-xl text-charcoal mb-2">
+                  Analyzing Your Interview
+                </h4>
+                <p className="text-warmgrey text-sm">
+                  AI is evaluating your transcript across 5 dimensions.
+                  <br />This takes about 15–30 seconds.
+                </p>
+              </div>
+              <div className="space-y-2 max-w-xs mx-auto">
+                {['Transcription complete', 'Scoring technical depth', 'Evaluating communication', 'Building career path'].map((s, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm text-warmgrey">
+                    <Loader className="w-3.5 h-3.5 animate-spin text-gold" />
+                    {s}…
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ────── RESULTS ────── */}
+          {step === 'results' && s && (
+            <div className="space-y-6">
+              {/* Overall score + readiness badge */}
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-xl font-display font-bold text-white">
-                    Overall Score
+                  <h4 className="font-serif text-2xl text-charcoal">
+                    {s.scores?.overall ?? 0}<span className="text-warmgrey text-base">/100</span>
                   </h4>
-                  <p className="text-sm text-slate-400">
-                    {screening.screening.scores?.overall >= 85 ? 'Excellent performance!' :
-                     screening.screening.scores?.overall >= 70 ? 'Good job!' :
-                     screening.screening.scores?.overall >= 50 ? 'Room for improvement' :
-                     'Keep practicing!'}
+                  {s.aiEvaluation?.interviewReadiness && (
+                    <span className={`inline-block mt-1 px-3 py-0.5 text-xs font-semibold rounded-full border ${
+                      READINESS_MAP[s.aiEvaluation.interviewReadiness]?.color || ''
+                    }`}>
+                      {READINESS_MAP[s.aiEvaluation.interviewReadiness]?.label}
+                    </span>
+                  )}
+                </div>
+                <ScoreBadge score={s.scores?.overall || 0} size="lg" />
+              </div>
+
+              {/* 5-dimension bars */}
+              {s.aiEvaluation?.detailedScores && (
+                <div className="space-y-3 p-4 bg-charcoal/5 rounded-lg">
+                  <h5 className="text-xs overline">Performance Breakdown</h5>
+                  {Object.entries(s.aiEvaluation.detailedScores).map(([key, score]) =>
+                    renderDimensionBar(key, score as number)
+                  )}
+                </div>
+              )}
+
+              {/* Overall assessment */}
+              {s.aiEvaluation?.overallAssessment && (
+                <div className="p-4 bg-gold/5 rounded-lg border-l-4 border-gold">
+                  <p className="text-sm text-charcoal leading-relaxed">
+                    {s.aiEvaluation.overallAssessment}
                   </p>
                 </div>
-                <ScoreBadge score={screening.screening.scores?.overall || 0} size="lg" />
+              )}
+
+              {/* Strengths & Weaknesses */}
+              <div className="grid grid-cols-2 gap-4">
+                {s.aiEvaluation?.strengths?.length > 0 && (
+                  <div className="space-y-2">
+                    <h5 className="text-xs overline text-score-excellent">Strengths</h5>
+                    {s.aiEvaluation.strengths.map((str: string, i: number) => (
+                      <p key={i} className="text-sm text-charcoal flex items-start gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-score-excellent mt-0.5 flex-shrink-0" />
+                        {str}
+                      </p>
+                    ))}
+                  </div>
+                )}
+                {s.aiEvaluation?.weaknesses?.length > 0 && (
+                  <div className="space-y-2">
+                    <h5 className="text-xs overline text-score-poor">Areas to Improve</h5>
+                    {s.aiEvaluation.weaknesses.map((w: string, i: number) => (
+                      <p key={i} className="text-sm text-charcoal flex items-start gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-score-poor mt-0.5 flex-shrink-0" />
+                        {w}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 bg-white/5 rounded-lg text-center">
-                  <div className="text-2xl font-bold text-blue-400">
-                    {screening.screening.scores?.content || 0}
-                  </div>
-                  <div className="text-xs text-slate-400">Content</div>
-                </div>
-                <div className="p-3 bg-white/5 rounded-lg text-center">
-                  <div className="text-2xl font-bold text-purple-400">
-                    {screening.screening.scores?.communication || 0}
-                  </div>
-                  <div className="text-xs text-slate-400">Communication</div>
-                </div>
-                <div className="p-3 bg-white/5 rounded-lg text-center">
-                  <div className="text-2xl font-bold text-green-400">
-                    {screening.screening.scores?.professional || 0}
-                  </div>
-                  <div className="text-xs text-slate-400">Professional</div>
-                </div>
-              </div>
-
-              {screening.screening.feedback?.length > 0 && (
+              {/* Suggestions */}
+              {s.aiEvaluation?.suggestions?.length > 0 && (
                 <div className="space-y-2">
-                  <h5 className="text-sm font-semibold text-white">Feedback</h5>
-                  {screening.screening.feedback.map((fb: string, i: number) => (
-                    <p key={i} className={`text-sm flex items-start gap-2 ${
-                      fb.startsWith('Good') ? 'text-green-400' : 'text-yellow-400'
-                    }`}>
-                      {fb.startsWith('Good') ? (
-                        <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      )}
-                      {fb}
+                  <h5 className="text-xs overline">Suggestions</h5>
+                  {s.aiEvaluation.suggestions.map((sug: string, i: number) => (
+                    <p key={i} className="text-sm text-warmgrey flex items-start gap-1.5">
+                      <ChevronRight className="w-3.5 h-3.5 text-gold mt-0.5 flex-shrink-0" />
+                      {sug}
                     </p>
                   ))}
                 </div>
               )}
 
-              {screening.summary && (
-                <div className="p-4 bg-white/5 rounded-lg">
-                  <p className="text-sm text-slate-300">{screening.summary}</p>
+              {/* Career Path card */}
+              {s.aiEvaluation?.careerPath && (
+                <div className="p-4 bg-charcoal/5 rounded-lg space-y-3">
+                  <h5 className="text-xs overline">Career Path</h5>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="px-3 py-1 bg-charcoal text-white rounded-full text-xs font-medium">
+                      {s.aiEvaluation.careerPath.currentLevel}
+                    </span>
+                    <ArrowRight className="w-4 h-4 text-gold" />
+                    <span className="px-3 py-1 bg-gold/20 text-charcoal rounded-full text-xs font-medium">
+                      {s.aiEvaluation.careerPath.recommendedNext}
+                    </span>
+                    {s.aiEvaluation.careerPath.timeline && (
+                      <span className="text-xs text-warmgrey ml-auto">
+                        ~{s.aiEvaluation.careerPath.timeline}
+                      </span>
+                    )}
+                  </div>
+                  {s.aiEvaluation.careerPath.skillGaps?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {s.aiEvaluation.careerPath.skillGaps.map((gap: string, i: number) => (
+                        <span key={i} className="px-2 py-0.5 bg-red-50 text-red-600 text-xs rounded-full border border-red-200">
+                          {gap}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="flex gap-3">
+              {/* Duration */}
+              {s.duration > 0 && (
+                <p className="text-xs text-warmgrey text-center">
+                  Call duration: {Math.floor(s.duration / 60)}m {s.duration % 60}s
+                </p>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
                 <button
-                  onClick={() => setStep('consent')}
-                  className="flex-1 px-4 py-2 rounded-lg bg-white/10 text-white font-medium hover:bg-white/20 transition-colors"
+                  onClick={() => { setScreening(null); setStep('consent') }}
+                  className="flex-1 px-4 py-2.5 border border-charcoal/20 text-charcoal font-medium hover:border-charcoal transition-colors"
                 >
                   Practice Again
                 </button>
                 <button
                   onClick={onClose}
-                  className="flex-1 btn-primary btn-jobseeker"
+                  className="flex-1 btn-luxury"
                 >
                   Done
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Results fallback when screening data is missing */}
+          {step === 'results' && !s && (
+            <div className="text-center py-8">
+              <AlertCircle className="w-12 h-12 text-warmgrey mx-auto mb-4" />
+              <p className="text-warmgrey">No screening data available.</p>
+              <button
+                onClick={() => { setScreening(null); setStep('consent') }}
+                className="mt-4 btn-luxury"
+              >
+                Try Again
+              </button>
             </div>
           )}
         </div>

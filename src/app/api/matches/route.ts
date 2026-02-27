@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import connectDB from '@/lib/mongodb'
 import { Match, Jobseeker, Job, Screening } from '@/lib/models'
 import { matchJobseekerToJobs, matchJobToCandidates, getMatchingMetrics } from '@/lib/matching/engine'
+import { learnFromFeedback } from '@/lib/matching/adaptive'
 
 // GET - Fetch matches with optional filtering
 export async function GET(request: NextRequest) {
@@ -43,9 +44,17 @@ export async function GET(request: NextRequest) {
               skills: jobseeker.skills.slice(0, 5),
             } : null,
             job: job ? {
+              _id: job._id,
               title: job.title,
               company: job.company,
+              description: job.description,
               location: job.location,
+              remote: job.remote,
+              requiredSkills: job.requiredSkills,
+              preferredSkills: job.preferredSkills,
+              salaryRange: job.salaryRange,
+              experienceLevel: job.experienceLevel,
+              experienceYears: job.experienceYears,
             } : null,
             latestScreening: screening ? {
               score: screening.scores.overall,
@@ -194,6 +203,27 @@ export async function PATCH(request: NextRequest) {
 
     if (!match) {
       return NextResponse.json({ error: 'Match not found' }, { status: 404 })
+    }
+
+    // Trigger adaptive weight learning on invite/reject
+    if (status === 'invited' || status === 'rejected') {
+      try {
+        const jobId = match.jobId?.toString()
+        if (jobId) {
+          learnFromFeedback(
+            jobId,
+            {
+              skillMatch: match.skillMatch || 0,
+              experienceMatch: match.experienceMatch || 0,
+              locationMatch: match.locationMatch || 0,
+              salaryMatch: match.salaryMatch || 0,
+            },
+            status as 'invited' | 'rejected'
+          )
+        }
+      } catch (e) {
+        console.error('Adaptive learning error:', e)
+      }
     }
 
     return NextResponse.json(match)

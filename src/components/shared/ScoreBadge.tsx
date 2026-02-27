@@ -8,10 +8,10 @@ interface ScoreBadgeProps {
 
 export default function ScoreBadge({ score, size = 'md', showLabel = false }: ScoreBadgeProps) {
   const getScoreColor = (score: number) => {
-    if (score >= 85) return 'score-excellent'
-    if (score >= 70) return 'score-good'
-    if (score >= 50) return 'score-fair'
-    return 'score-poor'
+    if (score >= 85) return 'bg-score-excellent'
+    if (score >= 70) return 'bg-score-good'
+    if (score >= 50) return 'bg-score-fair'
+    return 'bg-score-poor'
   }
 
   const getScoreLabel = (score: number) => {

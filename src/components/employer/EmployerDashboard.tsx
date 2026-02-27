@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { 
   Briefcase, Users, Filter, ChevronDown, Phone, Mail, MapPin, 
-  CheckCircle, XCircle, Star, TrendingUp, Award, Plus, X, Search 
+  CheckCircle, XCircle, Star, TrendingUp, Award, Plus, X, Search,
+  GitCompare, Check
 } from 'lucide-react'
 import SkillAutocomplete from '../ui/SkillAutocomplete'
 import SalaryRangeSlider, { SingleSlider } from '../ui/SalaryRangeSlider'
@@ -30,6 +31,8 @@ export default function EmployerDashboard({ syncData, activeJobseeker, onRefresh
   const [filterScore, setFilterScore] = useState(0)
   const [filterSkillMatch, setFilterSkillMatch] = useState(0)
   const [sortBy, setSortBy] = useState<'score' | 'skills' | 'location' | 'salary'>('score')
+  const [compareList, setCompareList] = useState<any[]>([])
+  const [showComparison, setShowComparison] = useState(false)
 
   // Job posting state
   const [jobTitle, setJobTitle] = useState('')
@@ -128,6 +131,22 @@ export default function EmployerDashboard({ syncData, activeJobseeker, onRefresh
       onRefresh()
     } catch (error) {
       console.error('Error updating match:', error)
+    }
+  }
+
+  const toggleCompare = (candidate: any) => {
+    setCompareList(prev => {
+      const exists = prev.find(c => c._id === candidate._id)
+      if (exists) return prev.filter(c => c._id !== candidate._id)
+      if (prev.length >= 3) return prev // Max 3
+      return [...prev, candidate]
+    })
+  }
+
+  const batchInvite = async (minScore: number) => {
+    const toInvite = filteredCandidates.filter(c => c.matchScore >= minScore && c.status === 'pending')
+    for (const c of toInvite) {
+      await updateMatchStatus(c._id, 'invited')
     }
   }
 
@@ -442,6 +461,15 @@ export default function EmployerDashboard({ syncData, activeJobseeker, onRefresh
                 ({filteredCandidates.length} candidates)
               </span>
             </h3>
+            {filteredCandidates.filter(c => c.matchScore >= 80 && c.status === 'pending').length > 0 && (
+              <button
+                onClick={() => batchInvite(80)}
+                className="flex items-center gap-2 px-3 py-1.5 border border-score-excellent/30 text-score-excellent text-xs tracking-wider uppercase hover:bg-score-excellent/10 transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" />
+                Invite All 80%+
+              </button>
+            )}
           </div>
 
           {filteredCandidates.length === 0 ? (
@@ -464,11 +492,13 @@ export default function EmployerDashboard({ syncData, activeJobseeker, onRefresh
                   rank={index + 1}
                   isActive={candidate.jobseekerId === activeJobseeker}
                   isSelected={selectedCandidate?._id === candidate._id}
+                  isComparing={compareList.some((c: any) => c._id === candidate._id)}
                   statusBadge={getStatusBadge(candidate.status)}
                   onSelect={() => setSelectedCandidate(candidate)}
                   onInvite={() => updateMatchStatus(candidate._id, 'invited')}
                   onReject={() => updateMatchStatus(candidate._id, 'rejected')}
                   onShortlist={() => updateMatchStatus(candidate._id, 'saved')}
+                  onToggleCompare={() => toggleCompare(candidate)}
                 />
               ))}
             </div>
@@ -477,7 +507,7 @@ export default function EmployerDashboard({ syncData, activeJobseeker, onRefresh
       </div>
 
       {/* Candidate Detail Panel */}
-      {selectedCandidate && (
+      {selectedCandidate && !showComparison && (
         <div className="w-96 border-l border-charcoal/10 overflow-y-auto animate-slideInRight">
           <CandidateDetailPanel
             candidate={selectedCandidate}
@@ -486,6 +516,51 @@ export default function EmployerDashboard({ syncData, activeJobseeker, onRefresh
             onReject={() => updateMatchStatus(selectedCandidate._id, 'rejected')}
             onShortlist={() => updateMatchStatus(selectedCandidate._id, 'saved')}
           />
+        </div>
+      )}
+
+      {/* Comparison Panel */}
+      {showComparison && compareList.length >= 2 && (
+        <div className="fixed inset-0 bg-charcoal/50 z-50 flex items-center justify-center p-6">
+          <ComparisonModal
+            candidates={compareList}
+            onClose={() => setShowComparison(false)}
+          />
+        </div>
+      )}
+
+      {/* Floating Compare Bar */}
+      {compareList.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-charcoal text-white p-4 z-40 animate-fadeInUp">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <GitCompare className="w-5 h-5 text-gold" />
+              <span className="text-sm">{compareList.length} candidate{compareList.length > 1 ? 's' : ''} selected</span>
+              <div className="flex gap-2 ml-2">
+                {compareList.map(c => (
+                  <span key={c._id} className="px-2 py-1 bg-white/10 text-xs">
+                    {c.jobseeker?.name || 'Candidate'}
+                    <button onClick={() => toggleCompare(c)} className="ml-1 text-warmgrey hover:text-white">×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setCompareList([])}
+                className="text-xs text-warmgrey hover:text-white transition-colors"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setShowComparison(true)}
+                disabled={compareList.length < 2}
+                className="px-4 py-2 bg-gold text-charcoal text-xs tracking-widest uppercase font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gold/90 transition-colors"
+              >
+                Compare
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -511,21 +586,25 @@ function CandidateRow({
   rank,
   isActive,
   isSelected,
+  isComparing,
   statusBadge,
   onSelect,
   onInvite,
   onReject,
   onShortlist,
+  onToggleCompare,
 }: { 
   candidate: any
   rank: number
   isActive: boolean
   isSelected: boolean
+  isComparing: boolean
   statusBadge: { bg: string; text: string; label: string }
   onSelect: () => void
   onInvite: () => void
   onReject: () => void
   onShortlist: () => void
+  onToggleCompare: () => void
 }) {
   return (
     <div 
@@ -533,9 +612,20 @@ function CandidateRow({
       className={`border-t border-charcoal/10 py-5 cursor-pointer transition-all duration-500 group
         ${isSelected ? 'bg-taupe/30 border-l-4 border-l-gold pl-5' : 'hover:bg-taupe/20'}
         ${isActive ? 'ring-2 ring-gold/30' : ''}
+        ${isComparing ? 'bg-gold/5' : ''}
       `}
     >
       <div className="flex items-center gap-4">
+        {/* Compare checkbox */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleCompare(); }}
+          className={`w-5 h-5 border flex-shrink-0 flex items-center justify-center transition-all
+            ${isComparing ? 'bg-gold border-gold' : 'border-charcoal/20 hover:border-gold'}
+          `}
+          title="Add to compare"
+        >
+          {isComparing && <Check className="w-3 h-3 text-white" />}
+        </button>
         {/* Rank & Medal */}
         <div className="w-10 flex-shrink-0 text-center">
           <LeaderboardMedal rank={rank} />
@@ -786,6 +876,145 @@ function CandidateDetailPanel({
             <Mail className="w-4 h-4" />
             Email
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Comparison Modal
+function ComparisonModal({ candidates, onClose }: { candidates: any[]; onClose: () => void }) {
+  const dimensions = [
+    { key: 'matchScore', label: 'Overall Match' },
+    { key: 'skillMatch', label: 'Skills' },
+    { key: 'experienceMatch', label: 'Experience' },
+    { key: 'locationMatch', label: 'Location' },
+    { key: 'salaryMatch', label: 'Salary' },
+  ]
+
+  const getScoreColor = (score: number) => {
+    if (score >= 85) return 'text-score-excellent'
+    if (score >= 70) return 'text-score-good'
+    if (score >= 50) return 'text-score-fair'
+    return 'text-score-poor'
+  }
+
+  const getBarColor = (score: number) => {
+    if (score >= 85) return 'bg-score-excellent'
+    if (score >= 70) return 'bg-score-good'
+    if (score >= 50) return 'bg-score-fair'
+    return 'bg-score-poor'
+  }
+
+  // Find best score per dimension
+  const bestScores: Record<string, number> = {}
+  for (const dim of dimensions) {
+    bestScores[dim.key] = Math.max(...candidates.map(c => c[dim.key] || 0))
+  }
+
+  // Collect all skills across candidates
+  const allSkillsSet: Record<string, boolean> = {}
+  candidates.forEach(c => (c.jobseeker?.skills || []).forEach((s: string) => { allSkillsSet[s] = true }))
+  const allSkills = Object.keys(allSkillsSet)
+
+  return (
+    <div className="bg-alabaster w-full max-w-4xl max-h-[85vh] overflow-y-auto animate-scaleIn shadow-2xl">
+      {/* Header */}
+      <div className="sticky top-0 bg-charcoal text-white p-6 flex items-center justify-between z-10">
+        <div className="flex items-center gap-3">
+          <GitCompare className="w-5 h-5 text-gold" />
+          <h2 className="font-serif text-xl">Candidate Comparison</h2>
+          <span className="text-xs text-warmgrey ml-2">{candidates.length} candidates</span>
+        </div>
+        <button onClick={onClose} className="p-2 hover:bg-white/10 transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Candidate Headers */}
+      <div className="grid border-b border-charcoal/10" style={{ gridTemplateColumns: `200px repeat(${candidates.length}, 1fr)` }}>
+        <div className="p-4" />
+        {candidates.map(c => (
+          <div key={c._id} className="p-4 text-center border-l border-charcoal/10">
+            <div className="w-14 h-14 bg-charcoal text-white flex items-center justify-center font-serif text-xl mx-auto mb-2">
+              {c.jobseeker?.name?.[0]?.toUpperCase() || '?'}
+            </div>
+            <div className="font-serif text-lg text-charcoal">{c.jobseeker?.name || 'Candidate'}</div>
+            <div className="text-xs text-warmgrey flex items-center justify-center gap-1 mt-1">
+              <MapPin className="w-3 h-3" />
+              {c.jobseeker?.location || 'N/A'}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Score Dimensions */}
+      <div className="border-b border-charcoal/10">
+        <div className="p-4 overline">Score Breakdown</div>
+        {dimensions.map(dim => (
+          <div 
+            key={dim.key} 
+            className="grid border-t border-charcoal/5 hover:bg-taupe/20 transition-colors"
+            style={{ gridTemplateColumns: `200px repeat(${candidates.length}, 1fr)` }}
+          >
+            <div className="p-4 flex items-center text-sm text-warmgrey font-medium">{dim.label}</div>
+            {candidates.map(c => {
+              const score = c[dim.key] || 0
+              const isBest = score === bestScores[dim.key] && candidates.length > 1
+              return (
+                <div key={c._id} className="p-4 border-l border-charcoal/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`font-serif text-2xl ${getScoreColor(score)} ${isBest ? 'score-glow' : ''}`}>
+                      {score}%
+                    </span>
+                    {isBest && (
+                      <span className="px-1.5 py-0.5 bg-gold/10 text-gold text-[9px] tracking-wider uppercase">Best</span>
+                    )}
+                  </div>
+                  <div className="h-1.5 bg-taupe">
+                    <div className={`h-full ${getBarColor(score)} transition-all duration-700`} style={{ width: `${score}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Skill Comparison */}
+      <div className="p-4">
+        <div className="overline mb-4">Skill Coverage</div>
+        <div 
+          className="grid gap-2"
+          style={{ gridTemplateColumns: `200px repeat(${candidates.length}, 1fr)` }}
+        >
+          <div className="text-xs text-warmgrey font-medium p-2">Skill</div>
+          {candidates.map(c => (
+            <div key={c._id} className="text-xs text-warmgrey text-center p-2 font-medium">
+              {c.jobseeker?.name?.split(' ')[0] || 'N/A'}
+            </div>
+          ))}
+          {allSkills.slice(0, 15).map(skill => (
+            <>
+              <div key={`${skill}-label`} className="text-sm text-charcoal p-2 border-t border-charcoal/5">{skill}</div>
+              {candidates.map(c => {
+                const has = c.jobseeker?.skills?.includes(skill)
+                return (
+                  <div key={`${skill}-${c._id}`} className="flex items-center justify-center p-2 border-t border-charcoal/5 border-l border-charcoal/5">
+                    {has ? (
+                      <div className="w-5 h-5 bg-score-excellent/10 flex items-center justify-center">
+                        <Check className="w-3 h-3 text-score-excellent" />
+                      </div>
+                    ) : (
+                      <div className="w-5 h-5 bg-score-poor/5 flex items-center justify-center">
+                        <X className="w-3 h-3 text-warmgrey/30" />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </>
+          ))}
         </div>
       </div>
     </div>

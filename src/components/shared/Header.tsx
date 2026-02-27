@@ -1,6 +1,6 @@
 'use client'
 
-import { Users, Briefcase, Target, Database, Sparkles } from 'lucide-react'
+import { Users, Briefcase, Target, Database, Sparkles, BarChart3 } from 'lucide-react'
 
 interface HeaderProps {
   stats?: {
@@ -12,8 +12,8 @@ interface HeaderProps {
   }
   onSeedData: () => void
   isLoading: boolean
-  activeView: 'jobseeker' | 'employer'
-  onViewChange: (view: 'jobseeker' | 'employer') => void
+  activeView: 'jobseeker' | 'employer' | 'analytics'
+  onViewChange: (view: 'jobseeker' | 'employer' | 'analytics') => void
 }
 
 export default function Header({ stats, onSeedData, isLoading, activeView, onViewChange }: HeaderProps) {
@@ -108,6 +108,20 @@ export default function Header({ stats, onSeedData, isLoading, activeView, onVie
           >
             Employer
             {activeView === 'employer' && (
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold" />
+            )}
+          </button>
+          <button
+            onClick={() => onViewChange('analytics')}
+            className={`relative px-6 py-3 text-xs tracking-[0.15em] uppercase transition-all duration-500 flex items-center gap-1.5
+              ${activeView === 'analytics' 
+                ? 'text-charcoal' 
+                : 'text-warmgrey hover:text-charcoal'
+              }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            Analytics
+            {activeView === 'analytics' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold" />
             )}
           </button>
