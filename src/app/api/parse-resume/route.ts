@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const API_KEY = "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"
+const API_KEY = process.env.OPENROUTER_API_KEY!
 
 export interface AIResumeInsights {
   name: string
