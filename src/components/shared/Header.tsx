@@ -29,7 +29,7 @@ export default function Header({ stats, onSeedData, isLoading, activeView, onVie
             </div>
             <div>
               <h1 className="text-xl font-serif font-semibold text-charcoal tracking-tight">
-                DEET
+                beyondATS
               </h1>
               <p className="text-[10px] tracking-[0.2em] uppercase text-warmgrey">
                 AI Job Matching

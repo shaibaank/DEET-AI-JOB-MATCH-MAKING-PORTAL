@@ -124,7 +124,7 @@ Return ONLY the JSON.`
         'Authorization': `Bearer ${API_KEY}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'DEET Resume Parser',
+        'X-Title': 'beyondATS Resume Parser',
       },
       body: JSON.stringify({
         model: 'openai/gpt-4o-mini',

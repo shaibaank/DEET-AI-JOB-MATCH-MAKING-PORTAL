@@ -157,7 +157,7 @@ export default function Home() {
       <footer className="border-t border-charcoal/10 py-8">
         <div className="max-w-7xl mx-auto px-8 lg:px-12 flex items-center justify-between">
           <p className="text-xs text-warmgrey tracking-wide">
-            DEET — AI-Powered Job Matching Engine
+            beyondATS — AI-Powered Job Matching Engine
           </p>
           <p className="text-xs text-warmgrey/60">
             Hackathon MVP • {new Date().getFullYear()}

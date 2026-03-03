@@ -327,8 +327,8 @@ Format: One reason per line, no numbering.`
       headers: {
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://deet.app',
-        'X-Title': 'DEET Job Matching',
+        'HTTP-Referer': 'https://beyondats.app',
+        'X-Title': 'beyondATS Job Matching',
       },
       body: JSON.stringify({
         model: 'meta-llama/llama-3.1-8b-instruct:free',
@@ -436,8 +436,8 @@ Extract ALL technical skills mentioned. Be thorough with skills.`
       headers: {
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://deet.app',
-        'X-Title': 'DEET Resume Parsing',
+        'HTTP-Referer': 'https://beyondats.app',
+        'X-Title': 'beyondATS Resume Parsing',
       },
       body: JSON.stringify({
         model: 'meta-llama/llama-3.1-8b-instruct:free',

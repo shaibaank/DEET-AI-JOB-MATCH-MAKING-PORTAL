@@ -19,8 +19,8 @@ async function callOpenRouter(
     headers: {
       'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://deet-jobs.vercel.app',
-      'X-Title': 'Deet Jobs Screening',
+      'HTTP-Referer': 'https://beyondats.vercel.app',
+      'X-Title': 'beyondATS Jobs Screening',
     },
     body: JSON.stringify({
       model: 'openai/gpt-4o-mini',

@@ -66,8 +66,8 @@ Return ONLY the JSON, no other text.`
       headers: {
         'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://deet.app',
-        'X-Title': 'DEET Resume Parser',
+        'HTTP-Referer': 'https://beyondats.app',
+        'X-Title': 'beyondATS Resume Parser',
       },
       body: JSON.stringify({
         model: 'meta-llama/llama-3.1-8b-instruct:free',
